@@ -303,19 +303,30 @@ function Monitor({ sbUrl, sbKey, onDisconnect }) {
     if (!imgData || analyzing) return null;
     setAnalyzing(true);
     const b64 = imgData.split(",")[1];
+    console.log("画像サイズ:", b64.length);
+    console.log("送信先:", "/api/anthropic/v1/messages");
     const mt  = imgData.startsWith("data:image/png") ? "image/png" : "image/jpeg";
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/anthropic/v1/messages", {
+      //const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
-        headers:{ "Content-Type":"application/json" },
+        headers:{ 
+          "Content-Type":"application/json",
+          "x-api-key":import.meta.env.VITE_ANTHROPIC_KEY
+        },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:500,
           messages:[{ role:"user", content:[
             { type:"image", source:{ type:"base64", media_type:mt, data:b64 } },
-            { type:"text", text:`あなたは自宅の玄関・室内を監視するAIセキュリティシステムです。
-この画像を分析して、以下のJSON形式のみで返答（マークダウン不要）:
-{"level":"SAFE"|"CAUTION"|"ALERT","message":"状況説明50文字以内"}
-SAFE=日常/CAUTION=不審/ALERT=緊急` }
+            { type:"text", text:`You are a strict home security AI. Analyze the image and respond ONLY in this JSON format (no markdown):
+{"level":"SAFE"|"CAUTION"|"ALERT","message":"situation description in Japanese under 50 chars"}
+
+Strict criteria:
+- SAFE: Clearly safe. No people present, or only confirmed family members
+- CAUTION: Unfamiliar person, face not visible, unnatural posture or position, hands not visible
+- ALERT: Suspected intrusion, multiple suspicious individuals, weapons or tools, touching doors or windows
+
+If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
           ]}],
         }),
       });
