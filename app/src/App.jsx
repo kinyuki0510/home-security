@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import config from "./config";
 
 const MONO = "'Courier New', Courier, monospace";
 
@@ -102,92 +103,11 @@ function Btn({ onClick, disabled, color = "#00ff88", children, style = {} }) {
   );
 }
 
-function Field({ label, value, onChange, type = "text", placeholder }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 9, letterSpacing: 3, color: "rgba(0,255,136,0.5)", marginBottom: 4 }}>{label}</div>
-      <input
-        type={type} value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: "100%", boxSizing: "border-box",
-          background: "rgba(0,255,136,0.04)", border: "1px solid rgba(0,255,136,0.25)",
-          color: "#00ff88", fontFamily: MONO, fontSize: 11, padding: "8px 10px",
-          outline: "none",
-        }}
-      />
-    </div>
-  );
-}
-
-// ── Setup screen ──────────────────────────────────────────────────────────────
-function SetupScreen({ onConnect }) {
-  const [url, setUrl]   = useState("");
-  const [key, setKey]   = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr]   = useState("");
-
-  const test = async () => {
-    if (!url || !key) { setErr("両方入力してください"); return; }
-    setBusy(true); setErr("");
-    try {
-      const res = await fetch(`${url}/rest/v1/events?limit=1`, { headers: sbHeaders(key) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      onConnect(url.replace(/\/$/, ""), key);
-    } catch (e) {
-      setErr(`接続失敗: ${e.message}`);
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <div style={{
-      minHeight:"100vh", background:"#050a05",
-      backgroundImage:"radial-gradient(ellipse at 50% 0%,rgba(0,50,20,.4) 0%,transparent 60%)",
-      display:"flex", alignItems:"center", justifyContent:"center", fontFamily:MONO,
-    }}>
-      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}`}</style>
-      <div style={{
-        width:380, border:"1px solid rgba(0,255,136,0.3)", padding:32, position:"relative",
-        animation:"fadeUp .4s ease",
-      }}>
-        <CRTFrame/>
-        <Scanline/>
-        <div style={{ textAlign:"center", marginBottom:28 }}>
-          <div style={{ fontSize:20, fontWeight:"bold", letterSpacing:4, color:"#00ff88" }}>
-            SENTINEL<span style={{opacity:.4}}>//AI</span>
-          </div>
-          <div style={{ fontSize:9, color:"rgba(0,255,136,0.4)", letterSpacing:3, marginTop:4 }}>
-            SUPABASE CONNECTION SETUP
-          </div>
-        </div>
-
-        <Field label="PROJECT URL" value={url} onChange={setUrl}
-          placeholder="https://xxxx.supabase.co" />
-        <Field label="PUBLISHABLE KEY / ANON KEY" value={key} onChange={setKey}
-          type="password" placeholder="sb_publishable_... or eyJ..." />
-
-        {err && (
-          <div style={{ fontSize:11, color:"#ff4444", marginBottom:12, borderLeft:"2px solid #ff4444", paddingLeft:8 }}>
-            {err}
-          </div>
-        )}
-
-        <Btn onClick={test} disabled={busy} style={{ width:"100%", marginTop:4 }}>
-          {busy ? "接続確認中..." : "▶ 接続して開始"}
-        </Btn>
-
-        <div style={{ marginTop:16, fontSize:10, color:"rgba(0,255,136,0.3)", lineHeight:1.7 }}>
-          ※ キーはブラウザのメモリにのみ保持されます。<br/>
-          ※ 外部に送信されることはありません。
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Gallery modal ─────────────────────────────────────────────────────────────
-function Gallery({ events, sbUrl, sbKey, onClose }) {
+function Gallery({ events, onClose }) {
   const [imgs, setImgs] = useState({});
+  const sbUrl = config.supabase.url;
+  const sbKey = config.supabase.key;
 
   useEffect(() => {
     events.forEach(async ev => {
@@ -238,7 +158,10 @@ function Gallery({ events, sbUrl, sbKey, onClose }) {
 }
 
 // ── Main monitor ──────────────────────────────────────────────────────────────
-function Monitor({ sbUrl, sbKey, onDisconnect }) {
+function Monitor() {
+  const sbUrl = config.supabase.url;
+  const sbKey = config.supabase.key;
+
   const videoRef    = useRef(null);
   const streamRef   = useRef(null);
   const timerRef    = useRef(null);
@@ -294,25 +217,23 @@ function Monitor({ sbUrl, sbKey, onDisconnect }) {
     c.width = videoRef.current.videoWidth || 640;
     c.height = videoRef.current.videoHeight || 480;
     c.getContext("2d").drawImage(videoRef.current, 0, 0);
-    setCaptured(c.toDataURL("image/jpeg", 0.8));
+    const dataUrl = c.toDataURL("image/jpeg", 0.8);
+    setCaptured(dataUrl);
     setUploaded(null);
-    return c.toDataURL("image/jpeg", 0.8);
+    return dataUrl;
   };
 
   const analyzeImage = useCallback(async (imgData) => {
     if (!imgData || analyzing) return null;
     setAnalyzing(true);
     const b64 = imgData.split(",")[1];
-    console.log("画像サイズ:", b64.length);
-    console.log("送信先:", "/api/anthropic/v1/messages");
     const mt  = imgData.startsWith("data:image/png") ? "image/png" : "image/jpeg";
     try {
       const res = await fetch("/api/anthropic/v1/messages", {
-      //const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
-        headers:{ 
+        headers:{
           "Content-Type":"application/json",
-          "x-api-key":import.meta.env.VITE_ANTHROPIC_KEY
+          "x-api-key": config.anthropic.apiKey,
         },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:500,
@@ -342,9 +263,7 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
     setSaving(true);
     let imagePath = null;
     try {
-      // upload image
       if (imgData) {
-        const b64 = imgData.split(",")[1];
         const blob = await (await fetch(imgData)).blob();
         const fname = `${Date.now()}.jpg`;
         imagePath = await sbUploadImage(sbUrl, sbKey, blob, fname);
@@ -361,10 +280,9 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
     if (!imgData) return;
     const result = await analyzeImage(imgData);
     if (!result) return;
-    const entry = { ...result, time: new Date().toLocaleTimeString("ja-JP"), local: true };
+    const entry = { ...result, time: new Date().toLocaleTimeString("ja-JP") };
     setCurLevel(result.level);
     setLogs(p => [entry, ...p].slice(0, 20));
-    // save to Supabase
     await saveToSupabase(result, imgData);
   };
 
@@ -412,7 +330,7 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
         }}/>
       </div>
 
-      {gallery && <Gallery events={dbEvents} sbUrl={sbUrl} sbKey={sbKey} onClose={() => setGallery(false)}/>}
+      {gallery && <Gallery events={dbEvents} onClose={() => setGallery(false)}/>}
 
       <div style={{ maxWidth:960, margin:"0 auto", position:"relative", zIndex:1 }}>
 
@@ -429,7 +347,6 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <Btn onClick={openGallery} style={{ fontSize:10 }}>☰ 履歴</Btn>
-            <Btn onClick={onDisconnect} color="#ff4444" style={{ fontSize:10 }}>⏏ 切断</Btn>
           </div>
         </div>
 
@@ -592,7 +509,5 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [creds, setCreds] = useState(null);
-  if (!creds) return <SetupScreen onConnect={(url, key) => setCreds({ url, key })} />;
-  return <Monitor sbUrl={creds.url} sbKey={creds.key} onDisconnect={() => setCreds(null)} />;
+  return <Monitor />;
 }
