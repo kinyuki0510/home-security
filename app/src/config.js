@@ -9,12 +9,11 @@ const config = {
 }
 
 const required = [
-  "VITE_ANTHROPIC_KEY",
   "VITE_SUPABASE_URL",
   "VITE_SUPABASE_KEY",
-]
+];
 
-required.forEach(key =>{
+required.forEach(key => {
   if (!import.meta.env[key]) {
     throw new Error(`環境変数 ${key} が設定されていません`)
   }

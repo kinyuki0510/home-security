@@ -229,7 +229,7 @@ function Monitor() {
     const b64 = imgData.split(",")[1];
     const mt  = imgData.startsWith("data:image/png") ? "image/png" : "image/jpeg";
     try {
-      const res = await fetch("/api/anthropic/v1/messages", {
+      const res = await fetch("/api/anthropic", {
         method:"POST",
         headers:{
           "Content-Type":"application/json",
