@@ -124,6 +124,55 @@ vercel env add XXXX
 
 ---
 
+## npm run の仕組み
+
+`package.json` の `scripts` に定義されたコマンドが `npm run` で実行される。
+
+```json
+"scripts": {
+  "dev":   "vite",       // 開発サーバー起動
+  "build": "vite build"  // 本番用ビルド
+}
+```
+
+### モードによる挙動の違い
+
+| コマンド | Viteのモード | プロキシ | 用途 |
+|---------|------------|---------|------|
+| `npm run dev` | development | 有効 | ローカル開発 |
+| `npm run build` | production | 無効 | Vercelへのデプロイ |
+
+### なぜ同じコード（App.jsx）でローカルと本番の動きが変わるか
+
+App.jsxは常に `/api/anthropic` にPOSTするだけ。その受け手が環境によって変わる：
+
+```
+ローカル（npm run dev）:
+  /api/anthropic → Viteプロキシ → Anthropic API
+  ※ プロキシはViteサーバーが生きている間だけ有効
+
+本番（npm run build → Vercel）:
+  /api/anthropic → Vercel Function（api/anthropic.js）→ Anthropic API
+  ※ ビルド後はViteサーバーは存在しない
+```
+
+### 環境変数の仕組み（VITE_プレフィックス）
+
+`VITE_` で始まる環境変数は**ビルド時にJSに値が焼き込まれる**。
+
+```javascript
+// コード上はこう書く
+import.meta.env.VITE_SUPABASE_URL
+
+// ビルド後は実際の値に置き換わる
+"https://xxxx.supabase.co"
+```
+
+Node.jsの `process.env` は実行時に読むが、`import.meta.env` はビルド時に埋め込まれる点が異なる。
+`VITE_` のないもの（`ANTHROPIC_API_KEY` など）はビルド後のJSには含まれず、サーバー側（Vercel Function）でのみ参照できる。
+
+---
+
 ## スキーマ変更の手順
 
 ```bash
