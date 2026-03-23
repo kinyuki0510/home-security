@@ -46,6 +46,37 @@ alias cd=cdnvm
 
 ---
 
+## CORS回避の設計
+
+ブラウザからAnthropicのAPIを直接呼ぶとCORSエラーになる。
+環境ごとに異なる方法で回避している。
+
+### ローカル開発
+
+```
+ブラウザ → Viteプロキシ（/api/anthropic） → api.anthropic.com
+```
+
+`vite.config.js` のプロキシ設定がリクエストを中継する。
+サーバーサイドで動くのでCORSが発生しない。
+`api/anthropic.js` は使われない。
+
+### 本番（Vercel）
+
+```
+ブラウザ → Vercel Function（/api/anthropic） → api.anthropic.com
+```
+
+`api/anthropic.js` がサーバーレス関数として動く。
+`ANTHROPIC_API_KEY` はサーバー側にのみ存在し、ブラウザには露出しない。
+
+### なぜViteプロキシだけではダメか
+
+Viteはローカル開発サーバー専用。`npm run build` でビルドすると消える。
+本番ではVercel Functionが必要になる。
+
+---
+
 ## 注意
 
 - `npm install` → `node_modules/` 内に閉じる → **他に影響なし**

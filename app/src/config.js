@@ -1,6 +1,6 @@
 const config = {
   anthropic: {
-    apiKey: import.meta.env.VITE_ANTHROPIC_KEY
+    apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY_DEV
   },
   supabase: {
     url: import.meta.env.VITE_SUPABASE_URL,
