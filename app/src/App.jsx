@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import config from "./config";
+import { supabase } from "./supabase";
 
 const MONO = "'Courier New', Courier, monospace";
 
@@ -507,7 +508,81 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
   );
 }
 
+// ── Login ─────────────────────────────────────────────────────────────────────
+function Login() {
+  const [email, setEmail]   = useState("");
+  const [sent,  setSent]    = useState(false);
+  const [error, setError]   = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (error) setError(error.message);
+    else setSent(true);
+    setLoading(false);
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#050a05",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: MONO, color: "#00ff88",
+    }}>
+      <div style={{
+        border: "1px solid rgba(0,255,136,0.3)", padding: 40, width: 320,
+        background: "rgba(0,8,0,0.6)",
+      }}>
+        <div style={{ fontSize: 18, fontWeight: "bold", letterSpacing: 4, marginBottom: 8 }}>
+          SENTINEL<span style={{ opacity: .4 }}>//AI</span>
+        </div>
+        <div style={{ fontSize: 9, color: "rgba(0,255,136,0.4)", letterSpacing: 2, marginBottom: 32 }}>
+          AUTHENTICATION REQUIRED
+        </div>
+
+        {sent ? (
+          <div style={{ fontSize: 12, color: "#00ff88", lineHeight: 1.8 }}>
+            メールを送信しました。<br/>
+            リンクをクリックしてログインしてください。
+          </div>
+        ) : (
+          <form onSubmit={handleLogin}>
+            <input
+              type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="メールアドレス" required
+              style={{
+                width: "100%", padding: "10px 12px", marginBottom: 12,
+                background: "transparent", border: "1px solid rgba(0,255,136,0.3)",
+                color: "#00ff88", fontFamily: MONO, fontSize: 12,
+                boxSizing: "border-box", outline: "none",
+              }}
+            />
+            {error && <div style={{ fontSize: 10, color: "#ff4444", marginBottom: 8 }}>{error}</div>}
+            <Btn style={{ width: "100%" }} disabled={loading}>
+              {loading ? "送信中..." : "▶ Magic Linkを送信"}
+            </Btn>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  return <Monitor />;
+  const [session, setSession] = useState(undefined);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) return null;
+  return session ? <Monitor /> : <Login />;
 }
