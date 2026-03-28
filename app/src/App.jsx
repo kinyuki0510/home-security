@@ -133,7 +133,8 @@ function Gallery({ events, onClose }) {
 }
 
 // ── Main monitor ──────────────────────────────────────────────────────────────
-function Monitor() {
+function Monitor({ session }) {
+  const userId = session.user.id;
   const videoRef    = useRef(null);
   const streamRef   = useRef(null);
   const timerRef    = useRef(null);
@@ -237,7 +238,7 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
     try {
       if (imgData) {
         const blob = await (await fetch(imgData)).blob();
-        const fname = `${Date.now()}.jpg`;
+        const fname = `${userId}/${Date.now()}.jpg`;
         imagePath = await sbUploadImage(blob, fname);
       }
       await sbInsertEvent({
@@ -555,5 +556,5 @@ export default function App() {
   }, []);
 
   if (session === undefined) return null;
-  return session ? <Monitor /> : <Login />;
+  return session ? <Monitor session={session} /> : <Login />;
 }
