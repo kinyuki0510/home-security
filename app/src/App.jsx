@@ -10,52 +10,28 @@ const LEVELS = {
   ALERT:   { label: "警戒", color: "#ff4444", bg: "rgba(255,68,68,0.12)",  icon: "■" },
 };
 
-// ── Supabase helpers (no SDK, raw fetch) ──────────────────────────────────────
-function sbHeaders(key) {
-  return {
-    "Content-Type": "application/json",
-    "apikey": key,
-    "Authorization": `Bearer ${key}`,
-  };
+// ── Supabase helpers ──────────────────────────────────────────────────────────
+async function sbInsertEvent({ level, message, imagePath }) {
+  const { error } = await supabase.from("events").insert({ level, message, image_path: imagePath });
+  if (error) throw new Error(error.message);
 }
 
-async function sbInsertEvent(url, key, { level, message, imagePath }) {
-  const res = await fetch(`${url}/rest/v1/events`, {
-    method: "POST",
-    headers: { ...sbHeaders(key), "Prefer": "return=minimal" },
-    body: JSON.stringify({ level, message, image_path: imagePath }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
-async function sbUploadImage(url, key, blob, path) {
-  const res = await fetch(`${url}/storage/v1/object/captures/${path}`, {
-    method: "POST",
-    headers: { "apikey": key, "Authorization": `Bearer ${key}`, "Content-Type": "image/jpeg" },
-    body: blob,
-  });
-  if (!res.ok) throw new Error(await res.text());
+async function sbUploadImage(blob, path) {
+  const { error } = await supabase.storage.from("captures").upload(path, blob, { contentType: "image/jpeg" });
+  if (error) throw new Error(error.message);
   return path;
 }
 
-async function sbFetchEvents(url, key, limit = 30) {
-  const res = await fetch(
-    `${url}/rest/v1/events?order=created_at.desc&limit=${limit}`,
-    { headers: sbHeaders(key) }
-  );
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+async function sbFetchEvents(limit = 30) {
+  const { data, error } = await supabase.from("events").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-async function sbGetSignedUrl(url, key, path) {
-  const res = await fetch(`${url}/storage/v1/object/sign/captures/${path}`, {
-    method: "POST",
-    headers: { ...sbHeaders(key), "Content-Type": "application/json" },
-    body: JSON.stringify({ expiresIn: 3600 }),
-  });
-  if (!res.ok) return null;
-  const d = await res.json();
-  return `${url}/storage/v1${d.signedURL}`;
+async function sbGetSignedUrl(path) {
+  const { data, error } = await supabase.storage.from("captures").createSignedUrl(path, 3600);
+  if (error) return null;
+  return data.signedUrl;
 }
 
 // ── tiny components ───────────────────────────────────────────────────────────
@@ -107,13 +83,11 @@ function Btn({ onClick, disabled, color = "#00ff88", children, style = {} }) {
 // ── Gallery modal ─────────────────────────────────────────────────────────────
 function Gallery({ events, onClose }) {
   const [imgs, setImgs] = useState({});
-  const sbUrl = config.supabase.url;
-  const sbKey = config.supabase.key;
 
   useEffect(() => {
     events.forEach(async ev => {
       if (ev.image_path && !imgs[ev.image_path]) {
-        const signed = await sbGetSignedUrl(sbUrl, sbKey, ev.image_path);
+        const signed = await sbGetSignedUrl(ev.image_path);
         if (signed) setImgs(p => ({ ...p, [ev.image_path]: signed }));
       }
     });
@@ -159,10 +133,8 @@ function Gallery({ events, onClose }) {
 }
 
 // ── Main monitor ──────────────────────────────────────────────────────────────
-function Monitor() {
-  const sbUrl = config.supabase.url;
-  const sbKey = config.supabase.key;
-
+function Monitor({ session }) {
+  const userId = session.user.id;
   const videoRef    = useRef(null);
   const streamRef   = useRef(null);
   const timerRef    = useRef(null);
@@ -266,10 +238,10 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
     try {
       if (imgData) {
         const blob = await (await fetch(imgData)).blob();
-        const fname = `${Date.now()}.jpg`;
-        imagePath = await sbUploadImage(sbUrl, sbKey, blob, fname);
+        const fname = `${userId}/${Date.now()}.jpg`;
+        imagePath = await sbUploadImage(blob, fname);
       }
-      await sbInsertEvent(sbUrl, sbKey, {
+      await sbInsertEvent({
         level: result.level, message: result.message, imagePath,
       });
     } catch (e) { console.error("Supabase save error", e); }
@@ -300,7 +272,7 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
 
   const openGallery = async () => {
     try {
-      const evs = await sbFetchEvents(sbUrl, sbKey, 50);
+      const evs = await sbFetchEvents(50);
       setDbEvents(evs);
       setGallery(true);
     } catch (e) { alert("取得失敗: " + e.message); }
@@ -584,5 +556,5 @@ export default function App() {
   }, []);
 
   if (session === undefined) return null;
-  return session ? <Monitor /> : <Login />;
+  return session ? <Monitor session={session} /> : <Login />;
 }
