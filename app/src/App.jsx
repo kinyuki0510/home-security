@@ -83,10 +83,12 @@ function Btn({ onClick, disabled, color = "#00ff88", children, style = {} }) {
 // ── Gallery modal ─────────────────────────────────────────────────────────────
 function Gallery({ events, onClose }) {
   const [imgs, setImgs] = useState({});
+  const fetchedRef = useRef(new Set());
 
   useEffect(() => {
     events.forEach(async ev => {
-      if (ev.image_path && !imgs[ev.image_path]) {
+      if (ev.image_path && !fetchedRef.current.has(ev.image_path)) {
+        fetchedRef.current.add(ev.image_path);
         const signed = await sbGetSignedUrl(ev.image_path);
         if (signed) setImgs(p => ({ ...p, [ev.image_path]: signed }));
       }
@@ -158,11 +160,13 @@ function Monitor({ session }) {
     return () => clearInterval(t);
   }, []);
 
+  const captureAndAnalyzeRef = useRef(null);
+
   // auto capture loop
   useEffect(() => {
     clearInterval(timerRef.current);
     if (autoOn && camActive) {
-      timerRef.current = setInterval(() => captureAndAnalyze(), autoMin * 60 * 1000);
+      timerRef.current = setInterval(() => captureAndAnalyzeRef.current?.(), autoMin * 60 * 1000);
     }
     return () => clearInterval(timerRef.current);
   }, [autoOn, autoMin, camActive]);
@@ -248,7 +252,7 @@ If uncertain, default to CAUTION. Only use SAFE when absolutely certain.` }
     finally { setSaving(false); }
   };
 
-  const captureAndAnalyze = async () => {
+  captureAndAnalyzeRef.current = async () => {
     const imgData = camActive ? capture() : (captured || uploaded);
     if (!imgData) return;
     const result = await analyzeImage(imgData);
