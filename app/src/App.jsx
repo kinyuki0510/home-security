@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import config from "./config";
 import { supabase } from "./supabase";
 
 const MONO = "'Courier New', Courier, monospace";
@@ -206,11 +205,12 @@ function Monitor({ session }) {
     const b64 = imgData.split(",")[1];
     const mt  = imgData.startsWith("data:image/png") ? "image/png" : "image/jpeg";
     try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
       const res = await fetch("/api/anthropic", {
         method:"POST",
         headers:{
           "Content-Type":"application/json",
-          "x-api-key": config.anthropic.apiKey,
+          "Authorization": `Bearer ${currentSession.access_token}`,
         },
         body: JSON.stringify({
           model:"claude-haiku-4-5-20251001", max_tokens:500,
