@@ -1,19 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import handler from "./anthropic.js";
 
-const PROD_ORIGIN = "https://home-security.vercel.app";
-const LOCAL_ORIGIN = "http://localhost:5173";
+// Supabase クライアントをモック
+const mockGetUser = vi.fn();
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: () => ({
+    auth: { getUser: mockGetUser },
+  }),
+}));
+
+const { default: handler } = await import("./anthropic.js");
 
 function makeReqRes(overrides = {}) {
   const res = {
     statusCode: null,
     body: null,
     status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
+    json(body)  { this.body = body;       return this; },
   };
   const req = {
     method: "POST",
-    headers: { origin: LOCAL_ORIGIN },
+    headers: { authorization: "Bearer valid-token" },
     body: { model: "claude-haiku-4-5-20251001", max_tokens: 100, messages: [] },
     ...overrides,
   };
@@ -22,8 +28,9 @@ function makeReqRes(overrides = {}) {
 
 describe("anthropic handler", () => {
   beforeEach(() => {
-    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
     vi.restoreAllMocks();
+    // デフォルト: 認証成功
+    mockGetUser.mockResolvedValue({ data: { user: { id: "user-123" } }, error: null });
   });
 
   it("GETは405を返す", async () => {
@@ -32,10 +39,17 @@ describe("anthropic handler", () => {
     expect(res.statusCode).toBe(405);
   });
 
-  it("不正なoriginは403を返す", async () => {
-    const { req, res } = makeReqRes({ headers: { origin: "https://evil.com" } });
+  it("Authorizationヘッダーなしは401を返す", async () => {
+    const { req, res } = makeReqRes({ headers: {} });
     await handler(req, res);
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("無効なJWTは401を返す", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: new Error("invalid token") });
+    const { req, res } = makeReqRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(401);
   });
 
   it("bodyがない場合は400を返す", async () => {
@@ -51,20 +65,9 @@ describe("anthropic handler", () => {
   });
 
   it("bodyが5MBを超える場合は413を返す", async () => {
-    const largeBody = { data: "x".repeat(5 * 1024 * 1024 + 1) };
-    const { req, res } = makeReqRes({ body: largeBody });
+    const { req, res } = makeReqRes({ body: { data: "x".repeat(5 * 1024 * 1024 + 1) } });
     await handler(req, res);
     expect(res.statusCode).toBe(413);
-  });
-
-  it("本番環境では本番originのみ許可する", async () => {
-    process.env.VERCEL_PROJECT_PRODUCTION_URL = "home-security.vercel.app";
-    vi.resetModules();
-    const { default: prodHandler } = await import("./anthropic.js?prod");
-    const { req, res } = makeReqRes({ headers: { origin: LOCAL_ORIGIN } });
-    await prodHandler(req, res);
-    expect(res.statusCode).toBe(403);
-    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
   });
 
   it("正常なリクエストはAnthropicに転送する", async () => {
