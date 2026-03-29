@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git reset*)",
+      "Bash(git rebase*)",
+      "Bash(git stash drop*)",
+      "Bash(npx supabase db push*)",
+      "Bash(vercel deploy*)",
+      "Bash(rm -rf*)"
+    ]
+  }
+}
